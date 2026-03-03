@@ -1,0 +1,14 @@
+streamlit>=1.32.0
+openai>=1.40.0
+python-dotenv>=1.0.1
+pydantic>=2.7.0
+
+# OCR / image processing
+opencv-python>=4.9.0.80
+Pillow>=10.2.0
+
+# optional but recommended
+tenacity>=8.2.3
+loguru>=0.7.2
+rapidfuzz>=3.6.2
+json-repair>=0.30.0
