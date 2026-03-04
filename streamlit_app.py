@@ -10,8 +10,9 @@ from loguru import logger
 from core import context as ctx
 from core.context import ChatMessage
 from core.actions import dispatch_action_stream, parse_result
-from core.render import render_result
+from core.render import render_result, render_self_check_rule_from_json
 from core.schemas import MicrotaskResult
+from core.self_check import QUESTIONS, evaluate_self_check, result_to_json
 from core.paragraphing import split_paragraphs, number_paragraphs, paragraphs_to_list
 
 # ---------------------------------------------------------------------------
@@ -268,7 +269,9 @@ with center_col:
     with chat_container:
         for _msg_idx, msg in enumerate(ctx.get_chat_history()):
             with st.chat_message(msg.role):
-                if msg.action_type and msg.role == "assistant":
+                if msg.action_type == "self_check_rule" and msg.role == "assistant":
+                    render_self_check_rule_from_json(msg.content)
+                elif msg.action_type and msg.role == "assistant":
                     parsed_msg = parse_result(msg.action_type, msg.content)
                     render_result(parsed_msg)
                     if msg.action_type == "microtask_dim" and not _locked:
@@ -380,6 +383,61 @@ with center_col:
                     ctx.set_val("microtask_selection", None)
                     st.rerun()
 
+    # ---- 自评自查模式 ----
+    _sc_active = ctx.get("self_check_active")
+    _sc_result = ctx.get("self_check_result")
+
+    if _sc_active and not _locked:
+        st.divider()
+        st.markdown("### 自评自查（16题）")
+
+        if _sc_result is not None:
+            from core.render import render_self_check_rule
+            render_self_check_rule(_sc_result)
+            final = _sc_result.get("final_dimension", "")
+            st.info(f"自评结果：最需改进维度＝{final}。详细判定理由与各维度得分见上方。")
+            if st.button("重新作答", key="btn_sc_reset", use_container_width=True):
+                ctx.set_val("self_check_active", True)
+                ctx.set_val("self_check_answers", None)
+                ctx.set_val("self_check_result", None)
+                st.rerun()
+            if st.button("关闭自评", key="btn_sc_close", use_container_width=True):
+                ctx.set_val("self_check_active", False)
+                st.rerun()
+        else:
+            with st.form("self_check_form"):
+                sc_answers: dict[str, str] = {}
+                for q in QUESTIONS:
+                    st.markdown(f"**{q.qid} {q.title}**")
+                    st.caption(q.stem)
+                    choice = st.radio(
+                        q.qid,
+                        options=["A", "B", "C"],
+                        format_func=lambda x, _q=q: f"{x}  {_q.options[x]}",
+                        horizontal=True,
+                        key=f"sc_radio_{q.qid}",
+                        label_visibility="collapsed",
+                    )
+                    sc_answers[q.qid] = choice
+
+                submitted = st.form_submit_button("提交自评", use_container_width=True, type="primary")
+                if submitted:
+                    result = evaluate_self_check(sc_answers)
+                    result_json_str = result_to_json(result)
+                    ctx.set_val("self_check_answers", sc_answers)
+                    ctx.set_val("self_check_result", result)
+                    ctx.append_chat(ChatMessage(
+                        role="user",
+                        content="[触发功能] 自评自查（16题已提交）",
+                        action_type="self_check_rule",
+                    ))
+                    ctx.append_chat(ChatMessage(
+                        role="assistant",
+                        content=result_json_str,
+                        action_type="self_check_rule",
+                    ))
+                    st.rerun()
+
     if not _locked:
         user_input = st.chat_input("与AI对话…", key="chat_input")
         if user_input:
@@ -410,7 +468,10 @@ with right_col:
             st.rerun()
 
     if st.button("📊 自评自查", use_container_width=True, disabled=_locked):
-        _run_action("self_check", None, "自评自查")
+        ctx.set_val("self_check_active", True)
+        ctx.set_val("self_check_answers", None)
+        ctx.set_val("self_check_result", None)
+        st.rerun()
 
     st.divider()
 

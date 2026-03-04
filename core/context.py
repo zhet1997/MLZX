@@ -36,6 +36,9 @@ _DEFAULTS: dict = {
     "focus_duration_sec": 600,
     "focus_submitted": False,
     "microtask_grade_result": None,
+    "self_check_active": False,
+    "self_check_answers": None,
+    "self_check_result": None,
 }
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import streamlit as st
 
 from core.schemas import (
@@ -137,6 +139,44 @@ def render_chat_clarify(r: ChatClarifyResult) -> None:
             if q.options:
                 for opt in q.options:
                     st.markdown(f"- {opt}")
+
+
+def render_self_check_rule(result: dict) -> None:
+    """渲染确定性自评自查结果（非 LLM 产出）。"""
+    st.markdown("#### 自评自查结果")
+
+    final = result.get("final_dimension", "")
+    st.success(f"**最需改进维度：{final}**")
+
+    scores = result.get("scores", {})
+    if scores:
+        cols = st.columns(len(scores))
+        for col, (dim, s) in zip(cols, scores.items()):
+            label = f"{'👉 ' if dim == final else ''}{dim}"
+            col.metric(label, f"raw={s['raw']}", f"norm={s['norm']:.2f}  C×{s['ccount']}")
+
+    red_flags = result.get("red_flags", {})
+    if red_flags.get("ideation_red"):
+        triggered = "；".join(red_flags.get("triggered", []))
+        st.error(f"立意红灯触发：{triggered}")
+    elif red_flags.get("pool"):
+        st.warning(f"红灯池（含C维度）：{'、'.join(red_flags['pool'])}")
+
+    rationale = result.get("rationale", "")
+    if rationale:
+        st.markdown(f"**判定理由：**\n\n{rationale}")
+
+    with st.expander("完整 JSON", expanded=False):
+        st.code(json.dumps(result, ensure_ascii=False, indent=2), language="json")
+
+
+def render_self_check_rule_from_json(json_str: str) -> None:
+    """从 JSON 字符串解析并渲染自评自查结果（用于回放聊天记录）。"""
+    try:
+        result = json.loads(json_str)
+        render_self_check_rule(result)
+    except (json.JSONDecodeError, TypeError):
+        render_fallback(json_str)
 
 
 def render_fallback(text: str) -> None:

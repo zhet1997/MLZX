@@ -15,13 +15,12 @@ from core.schemas import (
     MicrotaskGradeResult,
     MicrotaskResult,
     PrescriptionResult,
-    SelfCheckResult,
     _Parseable,
 )
 
 # action -> (schema_class, json_mode)
+# 注意: self_check 已改为确定性规则引擎，不再通过 LLM，见 core/self_check.py
 ACTION_SCHEMA: dict[str, tuple[type[_Parseable], bool]] = {
-    "self_check": (SelfCheckResult, True),
     "commentary_overall": (CommentaryResult, True),
     "commentary_dim": (CommentaryResult, True),
     "prescription_overall": (PrescriptionResult, True),
@@ -33,7 +32,6 @@ ACTION_SCHEMA: dict[str, tuple[type[_Parseable], bool]] = {
 
 # 按钮显示名 -> (action, dimension)
 BUTTON_ACTIONS: dict[str, tuple[str, str | None]] = {
-    "自评自查": ("self_check", None),
     "综合点评": ("commentary_overall", None),
     "立意点评": ("commentary_dim", "立意"),
     "结构点评": ("commentary_dim", "结构"),
