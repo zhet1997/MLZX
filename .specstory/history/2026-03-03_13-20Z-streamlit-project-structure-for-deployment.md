@@ -1129,8 +1129,68 @@ git commit --trailer "Made-with: Cursor" -m "chore: remove secrets.toml from tra
 git push origin main
 
 ```
+
+```
+rm '.streamlit/secrets.toml'
+error: unknown option &#96;trailer'
+usage: git commit [&lt;options&gt;] [--] &lt;pathspec&gt;...
+
+    -q, --quiet           suppress summary after successful commit
+    -v, --verbose         show diff in commit message template
+
+Commit message options
+    -F, --file &lt;file&gt;     read message from file
+    --author &lt;author&gt;     override author for commit
+    --date &lt;date&gt;         override date for commit
+    -m, --message &lt;message&gt;
+                          commit message
+    -c, --reedit-message &lt;commit&gt;
+                          reuse and edit message from specified commit
+    -C, --reuse-message &lt;commit&gt;
+                          reuse message from specified commit
+    --fixup &lt;commit&gt;      use autosquash formatted message to fixup specified commit
+    --squash &lt;commit&gt;     use autosquash formatted message to squash specified commit
+    --reset-author        the commit is authored by me now (used with -C/-c/--amend)
+    -s, --signoff         add a Signed-off-by trailer
+    -t, --template &lt;file&gt;
+                          use specified template file
+    -e, --edit            force edit of commit
+    --cleanup &lt;mode&gt;      how to strip spaces and #comments from message
+    --status              include status in commit message template
+    -S, --gpg-sign[=&lt;key-id&gt;]
+                          GPG sign commit
+
+Commit contents options
+    -a, --all             commit all changed files
+    -i, --include         add specified files to index for commit
+    --interactive         interactively add files
+    -p, --patch           interactively add changes
+    -o, --only            commit only specified files
+    -n, --no-verify       bypass pre-commit and commit-msg hooks
+    --dry-run             show what would be committed
+    --short               show status concisely
+    --branch              show branch information
+    --ahead-behind        compute full ahead/behind values
+    --porcelain           machine-readable output
+    --long                show status in long format (default)
+    -z, --null            terminate entries with NUL
+    --amend               amend previous commit
+    --no-post-rewrite     bypass post-rewrite hook
+    -u, --untracked-files[=&lt;mode&gt;]
+                          show untracked files, optional modes: all, normal, no. (Default: all)
+    --pathspec-from-file &lt;file&gt;
+                          read pathspec from file
+    --pathspec-file-nul   with --pathspec-from-file, pathspec elements are separated with NUL character
+
+Everything up-to-date
+
+```
 </details>
 </tool-use>
+
+---
+
+Cancelled
 
 ---
 
