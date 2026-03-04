@@ -12,7 +12,7 @@ from core.context import ChatMessage
 from core.actions import dispatch_action_stream, parse_result
 from core.render import render_result, render_self_check_rule_from_json
 from core.schemas import MicrotaskResult
-from core.self_check import QUESTIONS, evaluate_self_check, result_to_json
+from core.self_check import QUESTIONS, evaluate_self_check, result_to_json, build_llm_rationale_prompt
 from core.paragraphing import split_paragraphs, number_paragraphs, paragraphs_to_list
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ _locked = ctx.get("focus_mode")
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 1rem; padding-bottom: 0.5rem; }
+    .block-container { padding-top: 4rem; padding-bottom: 0.5rem; }
     .stChatMessage { font-size: 0.95rem; }
     section[data-testid="stSidebar"] { display: none; }
     .stButton > button { padding-top: 0.25rem; padding-bottom: 0.25rem; font-size: 0.85rem; }
@@ -307,6 +307,82 @@ with center_col:
                 else:
                     st.markdown(msg.content)
 
+        # ---- 自评自查（渲染在对话框内部） ----
+        _sc_active = ctx.get("self_check_active")
+        _sc_result = ctx.get("self_check_result")
+
+        if _sc_active and not _locked:
+            st.divider()
+            st.markdown("### 自评自查（16题）")
+
+            if _sc_result is not None:
+                from core.render import render_self_check_rule
+                render_self_check_rule(_sc_result)
+                final = _sc_result.get("final_dimension", "")
+                st.info(f"自评结果：最需改进维度 = {final}。详细判定理由与各维度得分见上方。")
+                sc_c1, sc_c2 = st.columns(2)
+                with sc_c1:
+                    if st.button("重新作答", key="btn_sc_reset", use_container_width=True):
+                        ctx.set_val("self_check_active", True)
+                        ctx.set_val("self_check_answers", None)
+                        ctx.set_val("self_check_result", None)
+                        st.rerun()
+                with sc_c2:
+                    if st.button("关闭自评", key="btn_sc_close", use_container_width=True):
+                        ctx.set_val("self_check_active", False)
+                        st.rerun()
+            else:
+                _SC_SENTINEL = "-"
+                with st.form("self_check_form"):
+                    sc_answers: dict[str, str] = {}
+                    for q in QUESTIONS:
+                        st.markdown(f"**{q.qid} {q.title}**")
+                        st.caption(q.stem)
+                        choice = st.radio(
+                            q.qid,
+                            options=[_SC_SENTINEL, "A", "B", "C"],
+                            format_func=lambda x, _q=q: (
+                                "-- 请选择 --" if x == "-"
+                                else f"{x}  {_q.options[x]}"
+                            ),
+                            horizontal=True,
+                            key=f"sc_radio_{q.qid}",
+                            label_visibility="collapsed",
+                        )
+                        sc_answers[q.qid] = choice
+
+                    submitted = st.form_submit_button("提交自评", use_container_width=True, type="primary")
+                    if submitted:
+                        unanswered = [qid for qid, v in sc_answers.items() if v == _SC_SENTINEL]
+                        if unanswered:
+                            st.warning(f"请完成所有题目后再提交。未作答：{', '.join(unanswered)}")
+                        else:
+                            result = evaluate_self_check(sc_answers)
+
+                            from llm import call_llm
+                            prompt_msgs = build_llm_rationale_prompt(result, sc_answers)
+                            with st.spinner("正在生成分析..."):
+                                try:
+                                    rationale_text = call_llm(prompt_msgs, json_mode=False, temperature=0.7)
+                                    result["rationale"] = rationale_text.strip()
+                                except Exception as e:
+                                    logger.warning("LLM rationale 生成失败，使用规则文本: {}", e)
+
+                            result_json_str = result_to_json(result)
+                            ctx.set_val("self_check_answers", sc_answers)
+                            ctx.set_val("self_check_result", result)
+                            ctx.append_chat(ChatMessage(
+                                role="user",
+                                content="[触发功能] 自评自查（16题已提交）",
+                                action_type="self_check_rule",
+                            ))
+                            ctx.append_chat(ChatMessage(
+                                role="assistant",
+                                content=result_json_str,
+                                action_type="self_check_rule",
+                            ))
+                            st.rerun()
+
     # ---- 专注作答模式 ----
     if _locked:
         sel = ctx.get("microtask_selection")
@@ -381,61 +457,6 @@ with center_col:
                     ctx.set_val("focus_mode", False)
                     ctx.set_val("focus_deadline_ts", None)
                     ctx.set_val("microtask_selection", None)
-                    st.rerun()
-
-    # ---- 自评自查模式 ----
-    _sc_active = ctx.get("self_check_active")
-    _sc_result = ctx.get("self_check_result")
-
-    if _sc_active and not _locked:
-        st.divider()
-        st.markdown("### 自评自查（16题）")
-
-        if _sc_result is not None:
-            from core.render import render_self_check_rule
-            render_self_check_rule(_sc_result)
-            final = _sc_result.get("final_dimension", "")
-            st.info(f"自评结果：最需改进维度＝{final}。详细判定理由与各维度得分见上方。")
-            if st.button("重新作答", key="btn_sc_reset", use_container_width=True):
-                ctx.set_val("self_check_active", True)
-                ctx.set_val("self_check_answers", None)
-                ctx.set_val("self_check_result", None)
-                st.rerun()
-            if st.button("关闭自评", key="btn_sc_close", use_container_width=True):
-                ctx.set_val("self_check_active", False)
-                st.rerun()
-        else:
-            with st.form("self_check_form"):
-                sc_answers: dict[str, str] = {}
-                for q in QUESTIONS:
-                    st.markdown(f"**{q.qid} {q.title}**")
-                    st.caption(q.stem)
-                    choice = st.radio(
-                        q.qid,
-                        options=["A", "B", "C"],
-                        format_func=lambda x, _q=q: f"{x}  {_q.options[x]}",
-                        horizontal=True,
-                        key=f"sc_radio_{q.qid}",
-                        label_visibility="collapsed",
-                    )
-                    sc_answers[q.qid] = choice
-
-                submitted = st.form_submit_button("提交自评", use_container_width=True, type="primary")
-                if submitted:
-                    result = evaluate_self_check(sc_answers)
-                    result_json_str = result_to_json(result)
-                    ctx.set_val("self_check_answers", sc_answers)
-                    ctx.set_val("self_check_result", result)
-                    ctx.append_chat(ChatMessage(
-                        role="user",
-                        content="[触发功能] 自评自查（16题已提交）",
-                        action_type="self_check_rule",
-                    ))
-                    ctx.append_chat(ChatMessage(
-                        role="assistant",
-                        content=result_json_str,
-                        action_type="self_check_rule",
-                    ))
                     st.rerun()
 
     if not _locked:

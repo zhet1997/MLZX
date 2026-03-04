@@ -261,6 +261,61 @@ def _build_rationale(
     return "\n".join(parts)
 
 
+DIMENSION_MAX: dict[str, int] = {
+    dim: 2 * len(qids) for dim, qids in DIMENSION_QIDS.items()
+}
+
+
+def build_llm_rationale_prompt(result: dict, answers: dict[str, str]) -> list[dict]:
+    """组装用于 LLM 生成自然语言判定理由的 messages。
+
+    读取 prompts/self_check_rationale.md 作为 system prompt，
+    填入判定结果数据后返回 [{"role": "system", ...}, {"role": "user", ...}]。
+    """
+    import os
+
+    final = result["final_dimension"]
+    scores = result["scores"]
+
+    scores_lines = []
+    for dim, s in scores.items():
+        mx = DIMENSION_MAX.get(dim, 0)
+        scores_lines.append(f"- {dim}：{s['raw']}/{mx}（选C {s['ccount']} 题）")
+    scores_summary = "\n".join(scores_lines)
+
+    bc_lines = []
+    for dim, qids in DIMENSION_QIDS.items():
+        for qid in qids:
+            ans = answers.get(qid, "A")
+            if ans in ("B", "C"):
+                q = QUESTION_MAP[qid]
+                bc_lines.append(f"- {qid}（{q.keyword}）选{ans}：{q.options[ans]}")
+    bc_details = "\n".join(bc_lines) if bc_lines else "（全部选A，无B/C题目）"
+
+    red_flags = result.get("red_flags", {})
+    if red_flags.get("ideation_red"):
+        triggered = "；".join(red_flags.get("triggered", []))
+        red_flag_note = f"**立意红灯已触发：** {triggered}"
+    else:
+        red_flag_note = ""
+
+    template_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "self_check_rationale.md")
+    with open(template_path, encoding="utf-8") as f:
+        template = f.read()
+
+    system_content = template.format(
+        final_dimension=final,
+        scores_summary=scores_summary,
+        bc_details=bc_details,
+        red_flag_note=red_flag_note,
+    )
+
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": "请根据以上信息生成判定理由。"},
+    ]
+
+
 def result_to_json(result: dict) -> str:
     """将评估结果序列化为 JSON 字符串。"""
     return json.dumps(result, ensure_ascii=False, indent=2)
