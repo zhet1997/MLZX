@@ -110,6 +110,12 @@ def build_messages(
     user_input : 用户在对话框中的输入（仅 chat_clarify 需要）
     extra_vars : 额外模板变量（如 microtask_grade 的 task_text / answer_text）
     """
+    from core import context as ctx
+
+    prior = ctx.build_prior_analysis()
+    if prior:
+        context = {**context, "chat_summary": prior}
+
     system_tpl = _load_template("system_base.md")
     system_msg = _safe_format(system_tpl, context)
 
@@ -142,8 +148,13 @@ def build_messages(
 
     messages = [
         {"role": "system", "content": system_msg},
-        {"role": "user", "content": user_msg},
     ]
+
+    if action == "chat_clarify":
+        dialogue_history = ctx.get_recent_dialogue()
+        messages.extend(dialogue_history)
+
+    messages.append({"role": "user", "content": user_msg})
 
     if user_input and action == "chat_clarify":
         messages.append({"role": "user", "content": user_input})

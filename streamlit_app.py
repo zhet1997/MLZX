@@ -196,6 +196,8 @@ def _stream_and_save(
 
     if hasattr(parsed, "chat_summary") and parsed.chat_summary:
         ctx.set_val("chat_summary", parsed.chat_summary)
+    else:
+        ctx.set_val("chat_summary", ctx.build_prior_analysis())
 
     if action == "microtask_dim":
         if isinstance(parsed, MicrotaskResult):
